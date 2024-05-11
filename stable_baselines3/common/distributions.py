@@ -262,13 +262,6 @@ class SquashedDiagGaussianDistribution(DiagGaussianDistribution):
 
 
 
-
-# Define the custom exponential activation function
-class ExpActivation(nn.Module):
-    def forward(self, x):
-        return th.exp(x)
-
-
 class DiagonalBetaDistribution(Distribution):
     """
     Gaussian distribution with diagonal covariance matrix, for continuous actions.
@@ -292,7 +285,7 @@ class DiagonalBetaDistribution(Distribution):
         # # TODO: allow action dependent std
         # log_std = nn.Parameter(th.ones(self.action_dim) * log_std_init, requires_grad=True)
         log_parameters = nn.Linear(latent_dim, 2*self.action_dim)
-        parameters = nn.Sequential(log_parameters,nn.Unflatten(1,(2,self.action_dim)), ExpActivation())
+        parameters = nn.Sequential(log_parameters,nn.Unflatten(1,(2,self.action_dim)), nn.Softplus())
         return parameters
 
     def proba_distribution(
