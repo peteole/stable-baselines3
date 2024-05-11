@@ -290,16 +290,15 @@ class DiagonalBetaDistribution(Distribution):
         # # TODO: allow action dependent std
         # log_std = nn.Parameter(th.ones(self.action_dim) * log_std_init, requires_grad=True)
         log_parameters = nn.Linear(latent_dim, 2*self.action_dim)
-        parameters = nn.Sequential(log_parameters, ExpActivation())
+        parameters = nn.Sequential(log_parameters,nn.Unflatten(1,(2,self.action_dim)), ExpActivation())
         return parameters
 
     def proba_distribution(
         self, parameters: th.Tensor
     ):
-        self.beta= Beta(parameters[:,0], parameters[:,1])
-        rescaling = transforms.AffineTransform(loc=self.action_space.low[0], scale=self.action_space.high[0]-self.action_space.low[0])
-        reshaping = transforms.Reshape(self.beta.batch_shape, self.beta.batch_shape + (1,))
-        self.distribution = TransformedDistribution(self.beta, [reshaping, rescaling])
+        self.beta= Beta(parameters[:,0,:], parameters[:,1,:])
+        rescaling = transforms.AffineTransform(loc=th.tensor(self.action_space.low[0]), scale=th.tensor(self.action_space.high[0])-th.tensor(self.action_space.low[0]))
+        self.distribution = TransformedDistribution(self.beta, [ rescaling])
         return self
 
     def log_prob(self, actions: th.Tensor) -> th.Tensor:
