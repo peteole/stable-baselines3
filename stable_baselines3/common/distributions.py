@@ -7,7 +7,8 @@ import numpy as np
 import torch as th
 from gymnasium import spaces
 from torch import nn
-from torch.distributions import Bernoulli, Categorical, Normal
+from torch.distributions import Bernoulli, Categorical, Normal, Beta, TransformedDistribution
+from torch.distributions import transforms
 
 from stable_baselines3.common.preprocessing import get_action_dim
 
@@ -259,6 +260,85 @@ class SquashedDiagGaussianDistribution(DiagGaussianDistribution):
         log_prob = self.log_prob(action, self.gaussian_actions)
         return action, log_prob
 
+
+
+
+# Define the custom exponential activation function
+class ExpActivation(nn.Module):
+    def forward(self, x):
+        return th.exp(x)
+
+class DiagonalBetaDistribution(Distribution):
+    """
+    Gaussian distribution with diagonal covariance matrix, for continuous actions.
+
+    :param action_dim:  Dimension of the action space.
+    """
+
+    def __init__(self,action_space: spaces.Box):
+        super().__init__()
+        self.action_dim = get_action_dim(action_space)
+        assert self.action_dim == 1, "Beta distribution only supports 1D action space"
+        self.action_space = action_space
+        # self.mean_actions = None
+        # self.log_std = None
+
+    def proba_distribution_net(self, latent_dim: int, log_std_init: float = 0.0):
+        
+        # mean_actions = nn.Linear(latent_dim, self.action_dim)
+        # # TODO: allow action dependent std
+        # log_std = nn.Parameter(th.ones(self.action_dim) * log_std_init, requires_grad=True)
+        log_parameters = nn.Linear(latent_dim, 2*self.action_dim)
+        parameters = nn.Sequential(log_parameters, ExpActivation())
+        return parameters
+
+    def proba_distribution(
+        self, parameters: th.Tensor
+    ):
+        beta= Beta(parameters[:,0], parameters[:,1])
+        rescaling = transforms.AffineTransform(loc=self.action_space.low[0], scale=self.action_space.high[0]-self.action_space.low[0])
+        reshaping = transforms.Reshape(beta.batch_shape, beta.batch_shape + (1,))
+        self.distribution = TransformedDistribution(beta, [reshaping, rescaling])
+        return self
+
+    def log_prob(self, actions: th.Tensor) -> th.Tensor:
+        """
+        Get the log probabilities of actions according to the distribution.
+        Note that you must first call the ``proba_distribution()`` method.
+
+        :param actions:
+        :return:
+        """
+        log_prob = self.distribution.log_prob(actions)
+        return sum_independent_dims(log_prob)
+
+    def entropy(self) -> Optional[th.Tensor]:
+        return sum_independent_dims(self.distribution.entropy())
+
+    def sample(self) -> th.Tensor:
+        # Reparametrization trick to pass gradients
+        return self.distribution.rsample()
+
+    def mode(self) -> th.Tensor:
+        return self.distribution.mean
+
+    def actions_from_params(self, mean_actions: th.Tensor, log_std: th.Tensor, deterministic: bool = False) -> th.Tensor:
+        # Update the proba distribution
+        self.proba_distribution(mean_actions, log_std)
+        return self.get_actions(deterministic=deterministic)
+
+    def log_prob_from_params(self, mean_actions: th.Tensor, log_std: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
+        """
+        Compute the log probability of taking an action
+        given the distribution parameters.
+
+        :param mean_actions:
+        :param log_std:
+        :return:
+        """
+        actions = self.actions_from_params(mean_actions, log_std)
+        log_prob = self.log_prob(actions)
+        return actions, log_prob
 
 class CategoricalDistribution(Distribution):
     """
@@ -676,6 +756,8 @@ def make_proba_distribution(
         dist_kwargs = {}
 
     if isinstance(action_space, spaces.Box):
+        if len(action_space.shape) == 1:
+            return DiagonalBetaDistribution(action_space)
         cls = StateDependentNoiseDistribution if use_sde else DiagGaussianDistribution
         return cls(get_action_dim(action_space), **dist_kwargs)
     elif isinstance(action_space, spaces.Discrete):
