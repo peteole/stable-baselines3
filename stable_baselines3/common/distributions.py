@@ -268,6 +268,7 @@ class ExpActivation(nn.Module):
     def forward(self, x):
         return th.exp(x)
 
+
 class DiagonalBetaDistribution(Distribution):
     """
     Gaussian distribution with diagonal covariance matrix, for continuous actions.
@@ -281,10 +282,11 @@ class DiagonalBetaDistribution(Distribution):
         assert self.action_dim == 1, "Beta distribution only supports 1D action space"
         self.action_space = action_space
         self.beta = None
+        self.rescaling = None
         # self.mean_actions = None
         # self.log_std = None
 
-    def proba_distribution_net(self, latent_dim: int, log_std_init: float = 0.0):
+    def proba_distribution_net(self, latent_dim: int):
         
         # mean_actions = nn.Linear(latent_dim, self.action_dim)
         # # TODO: allow action dependent std
@@ -297,8 +299,8 @@ class DiagonalBetaDistribution(Distribution):
         self, parameters: th.Tensor
     ):
         self.beta= Beta(parameters[:,0,:], parameters[:,1,:])
-        rescaling = transforms.AffineTransform(loc=th.tensor(self.action_space.low[0]), scale=th.tensor(self.action_space.high[0])-th.tensor(self.action_space.low[0]))
-        self.distribution = TransformedDistribution(self.beta, [ rescaling])
+        self.rescaling = transforms.AffineTransform(loc=th.tensor(self.action_space.low[0]), scale=th.tensor(self.action_space.high[0])-th.tensor(self.action_space.low[0]))
+        self.distribution = TransformedDistribution(self.beta, [ self.rescaling])
         return self
 
     def log_prob(self, actions: th.Tensor) -> th.Tensor:
@@ -313,14 +315,14 @@ class DiagonalBetaDistribution(Distribution):
         return sum_independent_dims(log_prob)
 
     def entropy(self) -> Optional[th.Tensor]:
-        return sum_independent_dims(self.distribution.entropy())
+        return sum_independent_dims(self.beta.entropy())
 
     def sample(self) -> th.Tensor:
         # Reparametrization trick to pass gradients
         return self.distribution.rsample()
 
     def mode(self) -> th.Tensor:
-        return self.distribution.mean
+        return self.rescaling(self.beta.mode)
 
     def actions_from_params(self, mean_actions: th.Tensor, log_std: th.Tensor, deterministic: bool = False) -> th.Tensor:
         # Update the proba distribution

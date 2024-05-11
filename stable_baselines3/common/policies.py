@@ -16,6 +16,7 @@ from stable_baselines3.common.distributions import (
     BernoulliDistribution,
     CategoricalDistribution,
     DiagGaussianDistribution,
+    DiagonalBetaDistribution,
     Distribution,
     MultiCategoricalDistribution,
     StateDependentNoiseDistribution,
@@ -692,6 +693,8 @@ class ActorCriticPolicy(BasePolicy):
 
         if isinstance(self.action_dist, DiagGaussianDistribution):
             return self.action_dist.proba_distribution(mean_actions, self.log_std)
+        elif isinstance(self.action_dist, DiagonalBetaDistribution):
+            return self.action_dist.proba_distribution(mean_actions)
         elif isinstance(self.action_dist, CategoricalDistribution):
             # Here mean_actions are the logits before the softmax
             return self.action_dist.proba_distribution(action_logits=mean_actions)
