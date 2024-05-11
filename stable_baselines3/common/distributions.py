@@ -280,6 +280,7 @@ class DiagonalBetaDistribution(Distribution):
         self.action_dim = get_action_dim(action_space)
         assert self.action_dim == 1, "Beta distribution only supports 1D action space"
         self.action_space = action_space
+        self.beta = None
         # self.mean_actions = None
         # self.log_std = None
 
@@ -295,10 +296,10 @@ class DiagonalBetaDistribution(Distribution):
     def proba_distribution(
         self, parameters: th.Tensor
     ):
-        beta= Beta(parameters[:,0], parameters[:,1])
+        self.beta= Beta(parameters[:,0], parameters[:,1])
         rescaling = transforms.AffineTransform(loc=self.action_space.low[0], scale=self.action_space.high[0]-self.action_space.low[0])
-        reshaping = transforms.Reshape(beta.batch_shape, beta.batch_shape + (1,))
-        self.distribution = TransformedDistribution(beta, [reshaping, rescaling])
+        reshaping = transforms.Reshape(self.beta.batch_shape, self.beta.batch_shape + (1,))
+        self.distribution = TransformedDistribution(self.beta, [reshaping, rescaling])
         return self
 
     def log_prob(self, actions: th.Tensor) -> th.Tensor:
@@ -800,6 +801,8 @@ def kl_divergence(dist_true: Distribution, dist_pred: Distribution) -> th.Tensor
             dim=1,
         ).sum(dim=1)
 
+    if isinstance(dist_true, DiagonalBetaDistribution):
+        return th.distributions.kl_divergence(dist_true.beta, dist_pred.beta)
     # Use the PyTorch kl_divergence implementation
     else:
         return th.distributions.kl_divergence(dist_true.distribution, dist_pred.distribution)
