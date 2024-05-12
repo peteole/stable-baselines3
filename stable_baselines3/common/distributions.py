@@ -736,7 +736,7 @@ class TanhBijector:
 
 
 def make_proba_distribution(
-    action_space: spaces.Space, use_sde: bool = False, dist_kwargs: Optional[Dict[str, Any]] = None
+    action_space: spaces.Space, use_sde: bool = False, use_beta: bool=False, dist_kwargs: Optional[Dict[str, Any]] = None
 ) -> Distribution:
     """
     Return an instance of Distribution for the correct type of action space
@@ -751,7 +751,7 @@ def make_proba_distribution(
         dist_kwargs = {}
 
     if isinstance(action_space, spaces.Box):
-        if len(action_space.shape) == 1:
+        if use_beta and len(action_space.shape) == 1:
             return DiagonalBetaDistribution(action_space)
         cls = StateDependentNoiseDistribution if use_sde else DiagGaussianDistribution
         return cls(get_action_dim(action_space), **dist_kwargs)
