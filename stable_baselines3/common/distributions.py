@@ -292,7 +292,7 @@ class DiagonalBetaDistribution(Distribution):
         self, parameters: th.Tensor
     ):
         self.beta= Beta(parameters[:,0,:], parameters[:,1,:])
-        self.rescaling = transforms.AffineTransform(loc=th.tensor(self.action_space.low[0]), scale=th.tensor(self.action_space.high[0])-th.tensor(self.action_space.low[0]))
+        self.rescaling = transforms.AffineTransform(loc=th.tensor(self.action_space.low[0],device=parameters.device), scale=th.tensor(self.action_space.high[0],device=parameters.device)-th.tensor(self.action_space.low[0],device=parameters.device))
         self.distribution = TransformedDistribution(self.beta, [ self.rescaling])
         return self
 
